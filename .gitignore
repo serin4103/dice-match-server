@@ -43,7 +43,6 @@ public/uploads/*
 !public/uploads/.gitkeep
 
 # Prisma
-prisma/migrations/
 .env.backup
 
 # Database
