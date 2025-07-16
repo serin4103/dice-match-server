@@ -18,19 +18,35 @@ export function setupSocketHandlers(io: Server) {
     const gameManager = new GameManager();
 
     io.on("connection", (socket: Socket) => {
-        console.log(`👤 User connected: ${socket.id}`);
+        console.log(`👤 User connected: ${socket.id} from ${socket.request.headers.origin}`);
+
+        // 연결 상태 확인용 핸들러
+        socket.on("ping", () => {
+            console.log(`📡 Ping from ${socket.id}`);
+            socket.emit("pong");
+        });
 
         // 사용자 입장 (대기실에 추가)
         socket.on("join", async (data: { userId: number }) => {
-            console.log(`🎮 ${data.userId} joined the waiting queue`);
-            const newGameId = await gameManager.addPlayer(socket.id, data.userId);
-            if(newGameId === null) return;
-            // MatchedEvent 보내기
-            const socketIds = gameManager.getSocketId(newGameId);
-            socketIds?.forEach((socketId) => {
-                io.to(socketId).emit("matched", {
-                    gameId: newGameId} as MatchedEvent);
-            });
+            try {
+                console.log(`🎮 ${data.userId} joined the waiting queue`);
+                const newGameId = await gameManager.addPlayer(socket.id, data.userId);
+                if(newGameId === null) return;
+                // MatchedEvent 보내기
+                const socketIds = gameManager.getSocketId(newGameId);
+                socketIds?.forEach((socketId) => {
+                    io.to(socketId).emit("matched", {
+                        gameId: newGameId} as MatchedEvent);
+                });
+            } catch (error) {
+                console.error(`❌ Error in join handler:`, error);
+                socket.emit("error", { message: "Failed to join game" });
+            }
+        });
+
+        // 에러 처리
+        socket.on("error", (error) => {
+            console.error(`🚨 Socket error from ${socket.id}:`, error);
         });
 
         // 게임 시작

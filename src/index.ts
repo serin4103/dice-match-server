@@ -23,6 +23,14 @@ const io = new Server(httpServer, {
         methods: ["GET", "POST", "PATCH"],
         credentials: true,
     },
+    // 클라우드 환경에서의 연결 안정성을 위한 설정
+    transports: ['websocket', 'polling'],
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    // Railway 환경에서 필요한 설정
+    serveClient: false, // 클라이언트 파일 제공 안 함
+    path: '/socket.io/', // 기본 경로 명시
 });
 
 // 미들웨어 설정
@@ -241,23 +249,63 @@ app.post("/user/profile/update", upload.single('image'), async (req: Request, re
     }
 });
 
+// Socket.IO 연결 테스트 엔드포인트
+app.get("/socket/test", (req: Request, res: Response) => {
+    const connectedClients = io.sockets.sockets.size;
+    res.json({
+        message: "Socket.IO server is running",
+        connectedClients: connectedClients,
+        timestamp: new Date().toISOString()
+    });
+});
+
 // 소켓 핸들러 설정
 setupSocketHandlers(io);
 
 const PORT = process.env.PORT || 4000;
 
-httpServer.listen(PORT, () => {
+const server = httpServer.listen(PORT, () => {
     const isProduction = process.env.NODE_ENV === 'production';
     const protocol = isProduction ? 'https' : 'http';
     
     console.log(`🚀 Socket server running on ${protocol}://localhost:${PORT}`);
-    console.log(
-        `📡 Client URL: ${process.env.CLIENT_URL || "http://localhost:3000"}`
-    );
+    console.log(`📡 Client URL: ${process.env.CLIENT_URL || "http://localhost:3000"}`);
+    console.log(`🗄️ Database: ${process.env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
     
     if (isProduction) {
         console.log('🔒 HTTPS는 클라우드 플랫폼에서 자동으로 처리됩니다');
     } else {
         console.log('🔓 개발 환경에서 HTTP로 실행 중');
     }
+}).on('error', (error) => {
+    console.error('❌ 서버 시작 오류:', error);
+    process.exit(1);
+});
+
+// 정상적인 종료 처리
+process.on('SIGTERM', () => {
+    console.log('💤 SIGTERM 신호 받음. 서버를 정상적으로 종료합니다...');
+    server.close(() => {
+        console.log('✅ HTTP 서버 종료 완료');
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('💤 SIGINT 신호 받음. 서버를 정상적으로 종료합니다...');
+    server.close(() => {
+        console.log('✅ HTTP 서버 종료 완료');
+        process.exit(0);
+    });
+});
+
+// 처리되지 않은 오류 처리
+process.on('uncaughtException', (error) => {
+    console.error('🚨 처리되지 않은 예외:', error);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 처리되지 않은 Promise 거부:', reason);
+    process.exit(1);
 });
